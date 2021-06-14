@@ -5,8 +5,7 @@ import math
 import torch 
 from sklearn.preprocessing import StandardScaler
 import pickle 
-import pandas as pd 
-
+import time
 
 #Define the path to the training data 
 validation_data_path15 = '../model_learning_data_pickled/20201030bag15.pickled'
@@ -14,7 +13,7 @@ validation_data_path3  = '../model_learning_data_pickled/20201030bag3.pickled'
 training_data_path     = '../model_learning_data_pickled/final_training_data.pickled'
 
 #Loading Traning Data
-training_data = pickle.load(open(validation_data_path15, "rb"))
+training_data = pickle.load(open(training_data_path, "rb"))
 x_train = training_data['features']
 y_train = training_data['labels']
 train_Fx = y_train[:,0].reshape(-1,1)
@@ -46,23 +45,24 @@ for i in layers[1:]:
 mx = deepgp.DeepGP(layers,Y=train_Fx, X=x_train, 
                   inits=inits, 
                   kernels=kernels, # the kernels for each layer
-                  num_inducing=500, back_constraint=False)
+                  num_inducing=40, back_constraint=False)
 my = deepgp.DeepGP(layers,Y=train_Fy, X=x_train, 
                   inits=inits, 
                   kernels=kernels, # the kernels for each layer
-                  num_inducing=500, back_constraint=False)
+                  num_inducing=40, back_constraint=False)
 mz = deepgp.DeepGP(layers,Y=train_Fz, X=x_train, 
                   inits=inits, 
                   kernels=kernels, # the kernels for each layer
-                  num_inducing=500, back_constraint=False)
+                  num_inducing=40, back_constraint=False)
 
-
+models_path = './'
 
 #Train and Predict 
 
 print('training in the x direction')
 mx.initialize_parameter()
-mx.optimize(messages=True,max_iters=1000)
+mx.optimize(messages=True,max_iters=0)
+np.save('model_save_x.npy', mx.param_array)
 print('Testing in x direction on validation_data_path15')
 mean_Fx_15,varx_15 = mx.predict(x_test_15)
 std_Fx_15 = np.sqrt(varx_15).squeeze()
@@ -72,9 +72,11 @@ mean_Fx_3,varx_3 = mx.predict(x_test_3)
 std_Fx_3 = np.sqrt(varx_3).squeeze()
 mean_Fx_3 = mean_Fx_3.squeeze()
 
+
 print('training in the y direction')
 my.initialize_parameter()
-my.optimize(messages=True,max_iters=1000)
+my.optimize(messages=True,max_iters=0)
+np.save('model_save_y.npy', my.param_array)
 print('Testing in x direction on validation_data_path15')
 mean_Fy_15,vary_15 = my.predict(x_test_15)
 std_Fy_15 = np.sqrt(vary_15).squeeze()
@@ -87,7 +89,8 @@ mean_Fy_3 = mean_Fy_3.squeeze()
 
 print('training in the z direction')
 mz.initialize_parameter()
-mz.optimize(messages=True,max_iters=1000)
+mz.optimize(messages=True,max_iters=0)
+np.save('model_save_z.npy', mz.param_array)
 print('Testing in x direction on validation_data_path15')
 mean_Fz_15,varz_15 = mz.predict(x_test_15)
 std_Fz_15 = np.sqrt(varz_15).squeeze()
@@ -98,12 +101,25 @@ std_Fz_3 = np.sqrt(varz_3).squeeze()
 mean_Fz_3 = mean_Fz_3.squeeze()
 
 
-pd.DataFrame(preds).to_csv("pred.txt",header = None, index = None)
-pd.DataFrame(preds).to_csv("pred.txt",header = None, index = None)
-pd.DataFrame(preds).to_csv("pred.txt",header = None, index = None)
-pd.DataFrame(preds).to_csv("pred.txt",header = None, index = None)
-pd.DataFrame(preds).to_csv("pred.txt",header = None, index = None)
-pd.DataFrame(preds).to_csv("pred.txt",header = None, index = None)
+experiments = 10
+execution_times = []
+for i in range(experiments):
+	idx = np.random.randint(0,4000)
+	print('Index',idx)
+	test_point = x_test_3[idx,:].reshape(-1,1)
+	print('Test_point',test_point.shape)
+	start = time.process_time()
+	pred_x = mx.predict(test_point.T)
+	pred_y = my.predict(test_point.T)
+	pred_z = mz.predict(test_point.T)
+	stop = time.process_time()
+	execution_times.append(stop-start)
+
+print('The execution times were:',execution_times)
+
+
+
+"""
 
 def RMSE(y,mean): 
     if type(y) == torch.Tensor:
@@ -121,6 +137,18 @@ def NLL(y,mean,std):
     if type(std) == torch.Tensor :
         std = std.numpy()
     return -0.5*((np.log(std**2)+((y-mean)/(std))**2).sum())
+
+
+preds15 = torch.Tensor([mean_Fx_15,mean_Fy_15,mean_Fz_15])
+std15 = torch.Tensor([std_Fx_15,std_Fy_15,std_Fz_15]) 
+preds3 = torch.Tensor([mean_Fx_3,mean_Fy_3,mean_Fz_3])
+std3 = torch.Tensor([std_Fx_3,std_Fy_3,std_Fz_3])
+
+predpath = './PredictionVectors/'
+torch.save(preds15,predpath + 'preds15.pt')
+torch.save(std15,predpath + 'std15.pt')
+torch.save(preds3,predpath + 'preds3.pt')
+torch.save(std3,predpath + 'std3.pt')
 
 
 #Compute statistics 
@@ -161,3 +189,22 @@ print('--------------------------------------------------')
 
 
 
+print('\n')
+print('-------------------STATISTICS ON TEST 3--------------------')
+print('\n-------Force in X -----')
+print('\n \n Root Mean Squared Error (RMSE)', RMSE(test_Fx_3,mean_Fx_3))
+print('\n \n Negative Log Likelihood (NLL)', NLL(test_Fx_3,mean_Fx_3,std_Fx_3))
+print('\n')
+print('-------Force in Y -----')
+print('\n \n Root Mean Squared Error (RMSE)', RMSE(test_Fy_3,mean_Fy_3))
+print('\n \n Negative Log Likelihood (NLL)', NLL(test_Fy_3,mean_Fy_3,std_Fy_3))
+print('\n')
+print('\n')
+print('-------Force in Z -----')
+print('\n \n Root Mean Squared Error (RMSE)', RMSE(test_Fz_3,mean_Fz_3))
+print('\n \n Negative Log Likelihood (NLL)', NLL(test_Fz_3,mean_Fz_3,std_Fz_3))
+print('\n')
+print('--------------------------------------------------')
+
+
+"""
